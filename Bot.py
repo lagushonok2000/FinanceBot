@@ -137,6 +137,24 @@ class SavingState(StatesGroup):
     waiting_amount = State()
     waiting_date = State()
 
+class BalanceHistoryState(StatesGroup):
+    waiting_balance_history = State()
+
+#Хэндлер для кнопки баланса
+@dp.message(Command("balance_history"))
+@dp.message(F.text == "БалансИстория")
+async def get_balance_button_handler(message: Message, state: FSMContext):
+    await state.set_state(BalanceHistoryState.waiting_balance_history)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Показать баланс",callback_data= "btn1"), InlineKeyboardButton(text="Показать историю",callback_data= "btn2")],])
+    await message.answer("Нажми на кнопку", reply_markup= keyboard)
+
+#хэндлер для кнопки накоплений
+@dp.message(Command("add_saving"))
+@dp.message(F.text == "Накопления")
+async def add_saving_handler(message: Message, state: FSMContext):
+    await state.set_state(SavingState.waiting_amount)
+    await message.answer("Введи сумму накопления: ")
+
 #Хэндлер для записи доходов и расходов
 @dp.message(Command("add_income"))
 @dp.message(Command("add_expense"))
@@ -203,13 +221,7 @@ async def save_transaction(message: Message, state: FSMContext):
 
     await state.clear()
 
-#хэндлер для накоплений
-@dp.message(Command("add_saving"))
-@dp.message(F.text == "Накопления")
-async def add_saving_handler(message: Message, state: FSMContext):
-    await state.set_state(SavingState.waiting_amount)
-    await message.answer("Введи сумму накопления: ")
-
+#обработка накопления
 @dp.message(SavingState.waiting_amount)
 async def set_amount(message: Message, state: FSMContext):
     try:
@@ -228,12 +240,6 @@ async def set_amount(message: Message, state: FSMContext):
         await message.answer("Пожалуйста, введи корректную сумму (число):")
 
 #дальше идет календарь
-
-#Хэндлер для кнопки баланса
-@dp.message(F.text == "Баланс/История")
-async def get_balance_button_handler(message: Message, state: FSMContext):
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Показать баланс",callback_data= "btn1"), InlineKeyboardButton(text="Показать историю",callback_data= "btn2")],])
-    await message.answer("Нажми на кнопку", reply_markup= keyboard)
 
 
 #Хэндлер для показа баланса
@@ -275,13 +281,13 @@ async def get_history_handler(callback: CallbackQuery):
         if incomes:
             response.append("\n💵 Доходы:")
             for amount, date, is_fixed, category in incomes:
-                line = format_history_line(amount, date, is_fixed, category, "🟢")
+                line = format_history_line(amount, date, is_fixed, category)
                 response.append(line)
 
         if expenses:
             response.append("\n🔻 Расходы:")
             for amount, date, is_fixed, category in expenses:
-                line = format_history_line(amount, date, is_fixed, category, "🔴")
+                line = format_history_line(amount, date, is_fixed, category)
                 response.append(line)
 
         if savings:
@@ -289,7 +295,7 @@ async def get_history_handler(callback: CallbackQuery):
             for amount, date in savings:
                 date_str = date.strftime("%d.%m")
                 amount_str = f"{float(amount):.2f}"
-                response.append(f"🟣 {date_str} | {'Накопления':<15} | {amount_str:>8} руб.")
+                response.append(f" {date_str} | {'Накопления':<15} | {amount_str:>8} руб.")
 
 
         full_message = "\n".join(response)
@@ -301,11 +307,11 @@ async def get_history_handler(callback: CallbackQuery):
         else:
             await callback.message.answer(full_message)
 
-def format_history_line(amount, date, is_fixed, category, emoji):
+def format_history_line(amount, date, is_fixed, category):
     amount_str = f"{float(amount):.2f}"
     date_str = date.strftime("%d.%m")
     type_icon = "🔹" if is_fixed else "🔸"
-    return f"{emoji} {type_icon} {date_str} | {category[:15]:<15} | {amount_str:>8} руб."
+    return f"{type_icon} {date_str} | {category[:15]:<15} | {amount_str:>1} руб."
 
 
 @dp.message(F.text & ~F.command)
@@ -332,22 +338,10 @@ async def set_date(callback_query: CallbackQuery, callback_data: dict, state: FS
             await callback_query.message.answer("Накопление успешно сохранено!")
 
 
-@dp.message(F.text.in_(["Доходы", "Расходы", "Накопления", "Баланс/История"]), StateFilter('*'))
-async def cancel_previous_state(message: Message, state: FSMContext):
-    await state.clear()
-    await message.answer("Предыдущее действие отменено")
-
-    if message.text == "Доходы" or message.text == "Расходы":
-        await add_transaction_handler(message, state)
-    elif message.text == "Накопления":
-        await add_saving_handler(message, state)
-    elif message.text == "Баланс/История":
-        await  get_balance_button_handler(message, state)
-
 def reply_keyboard():
     return ReplyKeyboardMarkup(keyboard=[
         [KeyboardButton(text="Доходы"), KeyboardButton(text="Расходы")],
-        [KeyboardButton(text="Накопления"), KeyboardButton(text="Баланс/История")]
+        [KeyboardButton(text="Накопления"), KeyboardButton(text="БалансИстория")]
     ], resize_keyboard=True)
 
 async def run_bot():
