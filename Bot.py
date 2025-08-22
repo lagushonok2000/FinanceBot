@@ -7,10 +7,13 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import StarTransaction, Message, ReplyKeyboardMarkup, KeyboardButton, CallbackQuery, \
     InlineKeyboardMarkup, InlineKeyboardButton
 import asyncio
+
+from numpy.random import set_state
+from param.ipython import message
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from aiogram_calendar import SimpleCalendar, SimpleCalendarCallback
 from DataBase import save_name_to_db, save_income_to_db, save_expense_to_db, save_saving_to_db, \
-    get_balance_from_db, get_user_history_from_db
+    get_balance_from_db, get_user_history_from_db, set_limit_in_user_category_to_db
 from SQLAlchemy import Base, User
 from aiogram.filters import StateFilter
 
@@ -71,7 +74,7 @@ async def help_handler(message: Message):
         "📊 Баланс/История:\n"
         "   • Просмотр текущего баланса\n"
         "   • История всех операций за месяц\n\n"
-        "Для начала работы просто нажмите нужную кнопку в меню!"
+        "Для начала работы просто нажми нужную кнопку в меню!"
     )
 
 class NameState(StatesGroup):
@@ -137,14 +140,15 @@ class SavingState(StatesGroup):
     waiting_amount = State()
     waiting_date = State()
 
-class BalanceHistoryState(StatesGroup):
+class OtherStates(StatesGroup):
     waiting_balance_history = State()
+    waiting_limit_amount = State()
 
 #Хэндлер для кнопки баланса
 @dp.message(Command("balance_history"))
 @dp.message(F.text == "БалансИстория")
 async def get_balance_button_handler(message: Message, state: FSMContext):
-    await state.set_state(BalanceHistoryState.waiting_balance_history)
+    await state.set_state(OtherStates.waiting_balance_history)
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Показать баланс",callback_data= "btn1"), InlineKeyboardButton(text="Показать историю",callback_data= "btn2")],])
     await message.answer("Нажми на кнопку", reply_markup= keyboard)
 
@@ -210,16 +214,46 @@ async def save_transaction(message: Message, state: FSMContext):
                 data['date'], is_fixed, db
             )
             await message.answer("Доход успешно сохранен!", reply_markup=reply_keyboard())
+            await state.clear()
         elif data['e_or_i'] == "expense":
-            await save_expense_to_db(
+            result = await save_expense_to_db(
                 data['category'], user_id, data['amount'],
                 data['date'], is_fixed, db
             )
             await message.answer("Расход успешно сохранен!", reply_markup=reply_keyboard())
+            await state.clear()
+            if not result[0]: #здесь находится лимит на категорию
+                await state.update_data(category_id = result[1]) #записываем в состояние айди категории
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="Да", callback_data="btnYes"),
+                     InlineKeyboardButton(text="Нет", callback_data="btnNo")], ])
+                await message.answer("Хочешь поставить лимит на эту категорию?", reply_markup= keyboard)
         else:
             await message.answer("Ошибка")
 
-    await state.clear()
+#Хэндлер для отмены записи лимита на категорию
+@dp.callback_query(F.data == "btnNo")
+async def cancel_set_limit_handler(callback: CallbackQuery, state: FSMContext):
+    await callback.answer("пон")
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await state.clear() #очищаю state от category_id
+
+#Хэндлер для записи лимита на категорию
+@dp.callback_query(F.data == "btnYes")
+async def button_limit_handler(callback: CallbackQuery):
+    await callback.answer("пон")
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await message.answer("Пожалуйста, введи корректную сумму лимита (число):")
+
+
+@dp.message(OtherStates.waiting_limit_amount)
+async def set_limit_handler(message: Message, state: FSMContext):
+    limit_amount = float(message.text)
+    data = await state.get_data() #сейчас здесь только category_id
+    async with get_db() as db:
+        await set_limit_in_user_category_to_db(data['category_id'], limit_amount, db)
+    await message.answer("Лимит сохранен!")
+    await state.clear() #очищаю state от category_id
 
 #обработка накопления
 @dp.message(SavingState.waiting_amount)

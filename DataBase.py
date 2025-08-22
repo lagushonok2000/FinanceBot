@@ -10,7 +10,6 @@ async def save_name_to_db(user_id, user_name, database):
     if result.rowcount == 0:
         await database.execute(insert(User).values(id = user_id, name = user_name))
     await database.commit()
-    return f"Приятно познакомиться, '{user_name}'!"
 
 
 async def save_income_to_db(category, user_id, amount, date, is_fixed, database):
@@ -21,24 +20,25 @@ async def save_income_to_db(category, user_id, amount, date, is_fixed, database)
         category_id = result.inserted_primary_key[0]  #мы берем айди новой категории
     await database.execute(insert(Income).values(category_id = category_id, user_id = user_id, amount = amount, date = date, is_fixed = is_fixed))
     await database.commit()
-    return f"Доход успешно добавлен"
 
 
 async def save_expense_to_db(category, user_id, amount, date, is_fixed, database):
-    result = await database.execute(select(UserCategory.id).filter(UserCategory.user_id == user_id, UserCategory.name == category))
+    result = await database.execute(select(UserCategory.id, UserCategory.limit).filter(UserCategory.user_id == user_id, UserCategory.name == category))
+    limit = None
+    for i in result:
+        limit = i[1]
     category_id = result.scalar_one_or_none()
     if not category_id:
         result = await database.execute(insert(UserCategory).values(user_id = user_id, name = category))
         category_id = result.inserted_primary_key[0]  #мы берем айди новой категории
     await database.execute(insert(Expense).values(category_id = category_id, user_id = user_id, amount = amount, date = date, is_fixed = is_fixed))
     await database.commit()
-    return f"Расход успешно добавлен"
+    return limit, category_id
 
 
 async def save_saving_to_db(user_id, amount, date, database):
     await database.execute(insert(Saving).values(user_id = user_id, amount = amount, date = date))
     await database.commit()
-    return f"Накопление успешно добавлено"
 
 
 async def get_balance_from_db(user_id, database):
@@ -53,13 +53,6 @@ async def get_balance_from_db(user_id, database):
 
     balance = sum_incomes - (sum_expenses + sum_savings)
 
-    return {
-        'incomes': sum_incomes,
-        'expenses': sum_expenses,
-        'savings': sum_savings,
-        'total': balance
-    }
-
 
 async def get_user_history_from_db(user_id, database):
     today = datetime.date.today()
@@ -69,11 +62,8 @@ async def get_user_history_from_db(user_id, database):
     savings = await database.execute(select(Saving.amount, Saving.date).filter(Saving.user_id == user_id, Saving.date >= start_month))
     return incomes, expenses, savings
 
-# async def save_user_category_to_db(category_name, user_id, database):
-#     result = await database.execute(select(UserCategory.id).filter(UserCategory.user_id == user_id, UserCategory.name == category_name))
-#     if result.rowcount == 0:
-#         result = await database.execute(insert(UserCategory).values(user_id = user_id, name = category_name))
-#         category_id = result.inserted_primary_key[0]  #мы берем айди новой категории
-#     await database.execute(insert(Saving).values(category_id = category_id, user_id = user_id, name = category_name))
-#     await database.commit()
-#     return f"Категория '{category_name}' успешно добавлена"
+
+async def set_limit_in_user_category_to_db(category_id, limit, database):
+    await database.execute(select(UserCategory.category_id)
+    await database.execute(insert(UserCategory).values(limit = limit))
+    await database.commit()

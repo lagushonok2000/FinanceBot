@@ -6,7 +6,7 @@ Base = declarative_base()
 
 class User(Base):
     __tablename__ = 'users'
-    id = Column(BigInteger, primary_key= True)
+    id = Column(BigInteger, primary_key = True)
     name = Column(String(50))
     user_categories = relationship('UserCategory', back_populates= 'user' )
     incomes = relationship('Income', back_populates= 'user')
@@ -15,18 +15,18 @@ class User(Base):
 
 class UserCategory(Base):
     __tablename__ = 'user_categories'
-    id = Column(Integer, primary_key= True)
-    name = Column(String, nullable=False)
-    user_id = Column(BigInteger, ForeignKey('users.id'), nullable= False)
+    id = Column(Integer, primary_key = True)
+    name = Column(String, nullable = False)
+    user_id = Column(BigInteger, ForeignKey('users.id'), nullable = False)
     user = relationship('User', back_populates= 'user_categories')
     incomes = relationship('Income', back_populates= 'category_relationship')
     expenses = relationship('Expense', back_populates= 'category_relationship')
-    #limit = Column(Integer)
+    limit = Column(Integer, nullable = True)
 
 
 class Income(Base):
     __tablename__ = 'incomes'
-    id = Column(Integer, primary_key= True)
+    id = Column(Integer, primary_key = True)
     category_id = Column(Integer, ForeignKey('user_categories.id'), nullable=False)
     user_id = Column(BigInteger, ForeignKey('users.id'), nullable=False)
     amount = Column(DECIMAL,  nullable=False)
